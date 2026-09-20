@@ -178,18 +178,37 @@ jq -n \
    + (if $effort == "none" then {} else {reasoning_effort: $effort} end)' \
   >"$work/request.json"
 
-http_code=$(curl -sS -o "$work/response.json" -w '%{http_code}' \
-  --max-time 300 \
-  -H "Authorization: Bearer ${key}" \
-  -H "Content-Type: application/json" \
-  -H "X-Title: ${GITHUB_REPOSITORY} AI review" \
-  --data-binary "@$work/request.json" \
-  "$api_url")
+# Upstream capacity errors are common and transient, and some providers
+# report them with HTTP 200 and an error body, so both forms are retried.
+attempts=${AI_REVIEW_ATTEMPTS:-3}
+for attempt in $(seq 1 "$attempts"); do
+  http_code=$(curl -sS -o "$work/response.json" -w '%{http_code}' \
+    --max-time 300 \
+    -H "Authorization: Bearer ${key}" \
+    -H "Content-Type: application/json" \
+    -H "X-Title: ${GITHUB_REPOSITORY} AI review" \
+    --data-binary "@$work/request.json" \
+    "$api_url")
 
-if [ "$http_code" != "200" ] || jq -e '.error' "$work/response.json" >/dev/null; then
-  echo "::error::Request to ${host} failed (HTTP ${http_code}): $(jq -r '.error.message // .' "$work/response.json")"
-  exit 1
-fi
+  err=$(jq -r '.error.message // empty' "$work/response.json")
+  if [ "$http_code" = "200" ] && [ -z "$err" ]; then
+    break
+  fi
+
+  # 4xx other than 429 is a bad request or a bad key: retrying cannot help.
+  retryable=0
+  case "$http_code" in
+    429|5*) retryable=1 ;;
+    200) case "$err" in *[Rr]ate*limit*|*overloaded*|*capacity*|*temporarily*) retryable=1 ;; esac ;;
+  esac
+  if [ "$retryable" = "0" ] || [ "$attempt" = "$attempts" ]; then
+    echo "::error::Request to ${host} failed (HTTP ${http_code}): ${err:-$(head -c 300 "$work/response.json")}"
+    exit 1
+  fi
+  delay=$((attempt * 20))
+  echo "::warning::${host} returned a transient error (attempt ${attempt}/${attempts}), retrying in ${delay}s: ${err:-HTTP $http_code}"
+  sleep "$delay"
+done
 
 echo "usage: $(jq -c '.usage' "$work/response.json")"
 
