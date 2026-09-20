@@ -13,6 +13,13 @@ documented conventions — and is told to say nothing rather than guess.
 The pull request's code is never checked out or executed. Only the diff, and
 the calling repo's conventions file, are sent to the model.
 
+Lockfiles and vendored paths are filtered out of that diff — `EXCLUDE_REGEX`
+sets which — and the model is told **which files were withheld**, because
+silence is indistinguishable from absence. A filtered `package-lock.json` looks
+exactly like a lockfile nobody updated, and a release bump then reads as a
+clean install about to break: a blocking finding, on every release, always
+wrong.
+
 ## Adding it to a repository
 
 One file, `.github/workflows/ai-review.yml`:
