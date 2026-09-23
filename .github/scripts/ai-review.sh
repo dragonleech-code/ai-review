@@ -5,16 +5,16 @@
 # Deliberately shallow: the goal is catching obvious bugs cheaply, not
 # replacing human review. Any OpenAI-compatible chat completions API works, so
 # the provider and model are settings, not code:
-#   OpenRouter (default)  https://openrouter.ai/api/v1                       model e.g. openai/gpt-5.4-mini
+#   OpenRouter (default)  https://openrouter.ai/api/v1                       model e.g. openai/gpt-6-sol
 #   Gemini                https://generativelanguage.googleapis.com/v1beta/openai   model e.g. gemini-3.8-flash
-#   OpenAI                https://api.openai.com/v1                          model e.g. gpt-5.4-mini
+#   OpenAI                https://api.openai.com/v1                          model e.g. gpt-6-sol
 #
 # Required env: AI_REVIEW_API_KEY, GH_TOKEN, PR_NUMBER, GITHUB_REPOSITORY
 # Optional env:
 #   AI_REVIEW_BASE_URL API base URL (default OpenRouter)
-#   AI_REVIEW_MODEL    model ID for that provider (default openai/gpt-5.4-mini)
+#   AI_REVIEW_MODEL    model ID for that provider (default openai/gpt-6-sol)
 #   AI_REVIEW_EFFORT   reasoning_effort: minimal|low|medium|high, or "none" to
-#                      omit the parameter (default low). Reasoning tokens bill
+#                      omit the parameter (default medium). Reasoning tokens bill
 #                      as output, so this is the main cost knob.
 #   MAX_DIFF_BYTES     skip the review above this size (default 200000)
 #   EXCLUDE_REGEX      diff paths to drop before review
@@ -29,8 +29,8 @@ base_url="${base_url%/}"
 api_url="${base_url}/chat/completions"
 host="${base_url#*://}"
 host="${host%%/*}"
-model="${AI_REVIEW_MODEL:-openai/gpt-5.4-mini}"
-effort="${AI_REVIEW_EFFORT:-low}"
+model="${AI_REVIEW_MODEL:-openai/gpt-6-sol}"
+effort="${AI_REVIEW_EFFORT:-medium}"
 max_bytes="${MAX_DIFF_BYTES:-200000}"
 exclude="${EXCLUDE_REGEX:-(^|/)(go\.sum|vendor/.*|.*\.lock|package-lock\.json)$}"
 context_file="${CONTEXT_FILE:-CLAUDE.md}"
