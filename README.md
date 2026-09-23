@@ -79,7 +79,7 @@ Actions). A repository-level value overrides the organization's.
 | `AI_REVIEW_API_KEY`  | secret   | Key for the provider. `OPENROUTER_API_KEY` is accepted as a fallback. |
 | `AI_REVIEW_BASE_URL` | variable | API base URL. Default `https://openrouter.ai/api/v1`.                 |
 | `AI_REVIEW_MODEL`    | variable | Model ID as that provider names it.                                   |
-| `AI_REVIEW_EFFORT`   | variable | `minimal`, `low`, `medium`, `high`, or `none`. Default `low`.         |
+| `AI_REVIEW_EFFORT`   | variable | `minimal`, `low`, `medium`, `high`, or `none`. Default `medium`.      |
 
 Any OpenAI-compatible chat completions API works — OpenRouter, Gemini's
 compatibility endpoint, OpenAI — so the provider is a variable, not a code
@@ -96,9 +96,9 @@ bug that did not exist.
 Precision is what matters here: a confident, specific, wrong finding costs more
 time than the review saves.
 
-#### Re-measured 2026-09-22, after the prompt and context changes
+#### Re-measured 2026-09-22/23, after the prompt and context changes
 
-Nine models, ten runs, against a pull request carrying five planted defects —
+Twelve models, thirteen runs, against a pull request carrying five planted defects —
 an off-by-one, a timer leak, a dropped consumer handler, a px unit, and a
 `clip-path` erasing a focus ring. Reasoning effort `medium` throughout.
 
@@ -132,7 +132,8 @@ stopped being useful.
 
 **What did separate them was the reasoning, which the score does not see.** One
 of the planted defects dropped a consumer's `onClick` by removing a `chain`
-call. Every model flagged it. Ten of thirteen explained it the same wrong way,
+call. Every model that produced findings flagged it — eleven of the twelve,
+since one timed out. Eight of those eleven explained it the same wrong way,
 saying the `{...rest}` spread overwrote the handler. It does not — `onClick` is
 destructured out of `rest`, so the handler is discarded rather than overridden,
 and the line that would have shown this was outside the diff's three lines of
@@ -145,7 +146,7 @@ vendor; `claude-sonnet-5` got it wrong at the same price as `gpt-6-sol`, which
 got it right; and the cheapest model in the table and the dearest are on
 opposite sides of it. Recall, price and release date all fail to predict it.
 
-Right finding, wrong mechanism, ten times over, matters more than the tally: it
+Right finding, wrong mechanism, eight times over, matters more than the tally: it
 says a model can reach the correct fix by matching a familiar pattern rather
 than reading the code, and that a finding's stated reasoning deserves less
 trust than the finding itself.
