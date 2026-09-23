@@ -96,6 +96,50 @@ bug that did not exist.
 Precision is what matters here: a confident, specific, wrong finding costs more
 time than the review saves.
 
+#### Re-measured 2026-09-22, after the prompt and context changes
+
+Nine models, ten runs, against a pull request carrying five planted defects —
+an off-by-one, a timer leak, a dropped consumer handler, a px unit, and a
+`clip-path` erasing a focus ring. Reasoning effort `medium` throughout.
+
+| Model | Caught | Cost |
+| --- | --- | --- |
+| `z-ai/glm-5.3-flash` | 5/5 | $0.0011 |
+| `openai/gpt-5.6-luna` | 5/5 | $0.0038 |
+| `anthropic/claude-haiku-4.5` | 5/5 (4/5 on a second run) | $0.0205 |
+| `anthropic/claude-sonnet-5` | 5/5 | $0.0284 |
+| `google/gemini-3.1-pro-preview` | 5/5 | $0.0482 |
+| `google/gemini-3.8-flash` | 4/5 | $0.0095 |
+| `minimax/minimax-m2.5` | 4/5 | $0.0025 |
+| `openai/gpt-6-luna` | 4/5 | $0.0017 |
+| `deepseek/deepseek-v4.1-flash` | — | timed out at 300s |
+
+**Read this as a result about the prompt, not about the models.** Before the
+context was pruned and the contradictions taken out of the system prompt,
+nothing scored above 4/5 and `gpt-5.6-luna` swung between 3/5 and 5/5 on
+identical runs. Afterwards half the field is perfect across a 44× price range,
+and `claude-haiku-4.5` scored 4/5 and 5/5 on two identical runs. The spread
+within a model is now larger than the spread between models, which means five
+planted bugs no longer separate current models and this particular bar has
+stopped being useful.
+
+**Recall is saturated; precision is not measured.** Every run above was against
+a diff carrying five real defects, which is the condition where a model is
+least likely to invent one. The original comparison's finding — that most
+models report bugs that do not exist — is what chose the default, and nothing
+in the table re-tests it. A clean-PR control was attempted and was not sound:
+the pull request chosen had a deliberate licensing change in it, both models
+tried flagged that one line, and whether they were wrong is a judgement rather
+than a fact. Scoring false positives needs several uncontroversial pull
+requests — a dependency bump, a docs-only change — and has not been done.
+
+So `openai/gpt-5.6-luna` stays the recommendation, on the strength of the
+original precision result rather than anything above. `z-ai/glm-5.3-flash` is
+the interesting candidate at a third of the cost, with one caveat: it is an
+open-weights model served by some thirty providers at differing quantizations,
+so a run does not reach a fixed target, and this script pins no provider.
+Pinning one is a prerequisite for taking it seriously, not a refinement.
+
 ## Inputs
 
 | Input | Required | Default | Purpose |
