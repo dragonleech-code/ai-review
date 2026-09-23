@@ -108,6 +108,32 @@ time than the review saves.
 The conventions file is read from the pull request's **base** commit, so a PR
 cannot rewrite the instructions sent alongside its own diff.
 
+### Point `context_file` at review-relevant rules, not at everything
+
+`CLAUDE.md` is the default because most repositories have one, not because it
+is the right file. In the repository this was built for it is 33.7 KB against a
+2.5 KB diff — the conventions are **94% of the prompt**, and most of them are
+about releases, branch protection and web server configuration, none of which a
+diff can violate.
+
+That is not only waste. A rule the reviewer cannot act on is a rule it can
+misapply: a governance section forbidding mentions of AI produced a blocking
+finding against a workflow whose job is to call an AI, on the grounds that the
+workflow named it. The finding was impossible to act on and cost more than the
+review saved.
+
+So keep a separate, shorter file holding the rules whose violation is a real
+failure — invariants, forbidden dependencies, unit conventions, the traps a
+component can fall into — and point `context_file` at it:
+
+```yaml
+with:
+  context_file: .github/review-conventions.md
+```
+
+Leave the process material where humans read it. The reviewer only needs what
+a diff can break.
+
 ## Versioning
 
 Callers pin `@v1`. The tag moves when the workflow changes, updating every
