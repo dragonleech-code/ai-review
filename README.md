@@ -109,6 +109,7 @@ an off-by-one, a timer leak, a dropped consumer handler, a px unit, and a
 | `anthropic/claude-haiku-4.5` | 5/5 (4/5 on a second run) | $0.0205 |
 | `anthropic/claude-sonnet-5` | 5/5 | $0.0284 |
 | `google/gemini-3.1-pro-preview` | 5/5 | $0.0482 |
+| `anthropic/claude-opus-5.5` | 5/5 | $0.0540 |
 | `google/gemini-3.8-flash` | 4/5 | $0.0095 |
 | `minimax/minimax-m2.5` | 4/5 | $0.0025 |
 | `openai/gpt-6-luna` | 4/5 | $0.0017 |
@@ -122,6 +123,22 @@ and `claude-haiku-4.5` scored 4/5 and 5/5 on two identical runs. The spread
 within a model is now larger than the spread between models, which means five
 planted bugs no longer separate current models and this particular bar has
 stopped being useful.
+
+**What did separate them was the reasoning, which the score does not see.** One
+of the planted defects dropped a consumer's `onClick` by removing a `chain`
+call. Ten models flagged it; nine explained it the same wrong way, saying the
+`{...rest}` spread overwrote the handler. It does not — `onClick` is
+destructured out of `rest`, so the handler is discarded rather than overridden,
+and the line that would have shown this was outside the diff's three lines of
+context. Only `claude-opus-5.5` said so, and said so without being shown that
+line, reasoning it out from the conventions file instead.
+
+Right finding, wrong mechanism, nine times over, is worth more than the tally
+above: it says a model can reach the correct fix by matching a familiar pattern
+rather than reading the code, and that a finding's stated reasoning deserves
+less trust than the finding itself. It is also an argument for giving the model
+more than three lines of context around each hunk — though a weaker one than it
+first appears, since one model managed without.
 
 **Recall is saturated; precision is not measured.** Every run above was against
 a diff carrying five real defects, which is the condition where a model is
