@@ -66,6 +66,11 @@ needed: no key, no script, no model choice per repo.
 - **On demand** for anything else, including fork PRs, which GitHub gives no
   secrets. An admin of the calling repository runs:
   `gh workflow run ai-review.yml -f pr_number=123 [-f model=<id>]`.
+- **Large diffs are skipped** above 200 KB (lockfiles excluded), with a notice
+  in the run log. A caller that exposes the `max_diff_bytes` input can raise it
+  for one dispatch — `-f max_diff_bytes=300000` — which is the intended way to
+  review a PR that is big on purpose, rather than raising the limit for every
+  PR.
   Dispatch requires admin because write access alone is enough to trigger and
   re-run workflows, and every run spends API credit.
 
@@ -80,6 +85,7 @@ Actions). A repository-level value overrides the organization's.
 | `AI_REVIEW_BASE_URL` | variable | API base URL. Default `https://openrouter.ai/api/v1`.                 |
 | `AI_REVIEW_MODEL`    | variable | Model ID as that provider names it.                                   |
 | `AI_REVIEW_EFFORT`   | variable | `minimal`, `low`, `medium`, `high`, or `none`. Default `medium`.      |
+| `AI_REVIEW_MAX_DIFF_BYTES` | variable | Skip the review above this many diff bytes (lockfiles excluded). Default `200000`. |
 
 Any OpenAI-compatible chat completions API works — OpenRouter, Gemini's
 compatibility endpoint, OpenAI — so the provider is a variable, not a code
