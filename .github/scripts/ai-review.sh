@@ -12,11 +12,11 @@
 # Required env: AI_REVIEW_API_KEY, GH_TOKEN, PR_NUMBER, GITHUB_REPOSITORY
 # Optional env:
 #   AI_REVIEW_BASE_URL API base URL (default OpenRouter)
-#   AI_REVIEW_MODEL    model ID for that provider (default openai/gpt-6-sol)
+#   AI_REVIEW_MODEL    optional model ID override (default: choose by diff size)
 #   AI_REVIEW_EFFORT   reasoning_effort: minimal|low|medium|high, or "none" to
 #                      omit the parameter (default medium). Reasoning tokens bill
 #                      as output, so this is the main cost knob.
-#   MAX_DIFF_BYTES     skip the review above this size (default 200000)
+#   MAX_DIFF_BYTES     optional safety limit; skip the review above this size
 #   EXCLUDE_REGEX      diff paths to drop before review
 #   CONTEXT_FILE       repo notes sent alongside the diff (default CLAUDE.md)
 #   DRY_RUN=1          print the review instead of commenting
@@ -29,9 +29,9 @@ base_url="${base_url%/}"
 api_url="${base_url}/chat/completions"
 host="${base_url#*://}"
 host="${host%%/*}"
-model="${AI_REVIEW_MODEL:-openai/gpt-6-sol}"
+model="${AI_REVIEW_MODEL:-}"
 effort="${AI_REVIEW_EFFORT:-medium}"
-max_bytes="${MAX_DIFF_BYTES:-200000}"
+max_bytes="${MAX_DIFF_BYTES:-}"
 exclude="${EXCLUDE_REGEX:-(^|/)(go\.sum|vendor/.*|.*\.lock|package-lock\.json)$}"
 context_file="${CONTEXT_FILE:-CLAUDE.md}"
 
@@ -93,10 +93,22 @@ if [ "$size" -eq 0 ]; then
   exit 0
 fi
 # Refuse rather than truncate: a review of half a diff reads as a review of all of it.
-if [ "$size" -gt "$max_bytes" ]; then
+if [ -n "$max_bytes" ] && [ "$size" -gt "$max_bytes" ]; then
   echo "::notice::Diff is ${size} bytes (limit ${max_bytes}); skipping AI review"
   exit 0
 fi
+
+# Size is the reviewable diff in bytes, after excluded paths are removed.
+if [ -z "$model" ]; then
+  if [ "$size" -lt 131072 ]; then
+    model="openai/gpt-6-sol"
+  elif [ "$size" -lt 262144 ]; then
+    model="openai/gpt-5.6-terra"
+  else
+    model="openai/gpt-6-luna"
+  fi
+fi
+echo "Reviewing ${size} diff bytes with ${model}"
 
 cat >"$work/system" <<'EOF'
 You are a code reviewer doing a quick first pass on a pull request diff.

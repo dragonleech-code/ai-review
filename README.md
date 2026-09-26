@@ -35,7 +35,7 @@ on:
         description: PR number to review
         required: true
       model:
-        description: Model ID override (blank = AI_REVIEW_MODEL)
+        description: Model ID override (blank = choose by filtered diff size)
         required: false
       effort:
         description: Reasoning effort override (blank = AI_REVIEW_EFFORT)
@@ -66,13 +66,14 @@ needed: no key, no script, no model choice per repo.
 - **On demand** for anything else, including fork PRs, which GitHub gives no
   secrets. An admin of the calling repository runs:
   `gh workflow run ai-review.yml -f pr_number=123 [-f model=<id>]`.
-- **Large diffs are skipped** above 200 KB (lockfiles excluded), with a notice
-  in the run log. A caller that exposes the `max_diff_bytes` input can raise it
-  for one dispatch — `-f max_diff_bytes=300000` — which is the intended way to
-  review a PR that is big on purpose, rather than raising the limit for every
-  PR.
-  Dispatch requires admin because write access alone is enough to trigger and
-  re-run workflows, and every run spends API credit.
+- **Model choice follows the filtered diff size.** Diffs below 128 KiB use
+  `openai/gpt-6-sol`; diffs from 128 KiB to below 256 KiB use
+  `openai/gpt-5.6-terra`; larger diffs use `openai/gpt-6-luna`. A `model` input
+  overrides this selection. An optional `AI_REVIEW_MAX_DIFF_BYTES` variable or
+  `max_diff_bytes` workflow input can still skip diffs above a chosen limit.
+
+Dispatch requires admin because write access alone is enough to trigger and
+re-run workflows, and every run spends API credit.
 
 ## Configuration
 
@@ -83,13 +84,12 @@ Actions). A repository-level value overrides the organization's.
 | -------------------- | -------- | --------------------------------------------------------------------- |
 | `AI_REVIEW_API_KEY`  | secret   | Key for the provider. `OPENROUTER_API_KEY` is accepted as a fallback. |
 | `AI_REVIEW_BASE_URL` | variable | API base URL. Default `https://openrouter.ai/api/v1`.                 |
-| `AI_REVIEW_MODEL`    | variable | Model ID as that provider names it.                                   |
 | `AI_REVIEW_EFFORT`   | variable | `minimal`, `low`, `medium`, `high`, or `none`. Default `medium`.      |
-| `AI_REVIEW_MAX_DIFF_BYTES` | variable | Skip the review above this many diff bytes (lockfiles excluded). Default `200000`. |
+| `AI_REVIEW_MAX_DIFF_BYTES` | variable | Optional limit on filtered diff bytes; unset means no limit. |
 
 Any OpenAI-compatible chat completions API works — OpenRouter, Gemini's
-compatibility endpoint, OpenAI — so the provider is a variable, not a code
-change.
+compatibility endpoint, OpenAI. The automatic model IDs use OpenRouter names;
+pass a `model` input with the provider's ID when using another endpoint.
 
 ### Choosing a model
 
@@ -175,7 +175,7 @@ tried flagged that one line, and whether they were wrong is a judgement rather
 than a fact. Scoring false positives needs several uncontroversial pull
 requests — a dependency bump, a docs-only change — and has not been done.
 
-The organization default is now **`openai/gpt-6-sol` at `medium`**. It is the
+The small-diff tier uses **`openai/gpt-6-sol` at `medium`**. It is the
 only model that scored 5/5 and explained the mechanism correctly, and it does
 so at 39% of the cost of the other model that managed both. `medium` is the
 only effort level with evidence behind it: both `luna` models went 3/5 to 4/5
@@ -198,9 +198,10 @@ Pinning one is a prerequisite for taking it seriously, not a refinement.
 | Input          | Required | Default            | Purpose                                                  |
 | -------------- | -------- | ------------------ | -------------------------------------------------------- |
 | `pr_number`    | yes      | —                  | PR to review, in the calling repository                  |
-| `model`        | no       | `AI_REVIEW_MODEL`  | Per-run model override                                   |
+| `model`        | no       | Size-based choice  | Per-run model override                                   |
 | `effort`       | no       | `AI_REVIEW_EFFORT` | Per-run reasoning effort                                 |
 | `context_file` | no       | `CLAUDE.md`        | Repo conventions sent with the diff, skipped when absent |
+| `max_diff_bytes` | no     | No limit           | Optional skip limit after excluded paths are removed    |
 
 The conventions file is read from the pull request's **base** commit, so a PR
 cannot rewrite the instructions sent alongside its own diff.
