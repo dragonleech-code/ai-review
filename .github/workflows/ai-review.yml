@@ -34,6 +34,15 @@ on:
         required: false
         type: string
         default: CLAUDE.md
+      max_diff_bytes:
+        # The skip threshold exists to cap cost on a runaway diff, not to
+        # refuse every large PR. A caller that knows a PR is big on purpose
+        # (a sweeping refactor, a batch of review fixes) can raise it for one
+        # dispatch; blank falls back to AI_REVIEW_MAX_DIFF_BYTES, then to the
+        # script's 200000.
+        description: Skip the review above this many diff bytes (blank = AI_REVIEW_MAX_DIFF_BYTES, else 200000)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -105,3 +114,4 @@ jobs:
           AI_REVIEW_MODEL: ${{ inputs.model || vars.AI_REVIEW_MODEL }}
           AI_REVIEW_EFFORT: ${{ inputs.effort || vars.AI_REVIEW_EFFORT }}
           CONTEXT_FILE: caller/${{ inputs.context_file }}
+          MAX_DIFF_BYTES: ${{ inputs.max_diff_bytes || vars.AI_REVIEW_MAX_DIFF_BYTES }}
