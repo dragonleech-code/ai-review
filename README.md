@@ -20,7 +20,17 @@ exactly like a lockfile nobody updated, and a release bump then reads as a
 clean install about to break: a blocking finding, on every release, always
 wrong.
 
-## Adding it to a repository
+## Organization-wide review
+
+The `dragonleech-code/.github` repository holds the central caller workflow.
+An organization ruleset runs it on pull requests to each repository's default
+branch and to `main` release branches, including repositories created later.
+No per-repository workflow file is needed for automatic review. The workflow
+must complete successfully before a covered PR can merge; its findings still
+require human judgment. Existing repository-local callers remain available for
+admin-only manual reviews, including fork PRs.
+
+## Adding it to a repository outside this organization
 
 One file, `.github/workflows/ai-review.yml`:
 
@@ -61,10 +71,13 @@ needed: no key, no script, no model choice per repo.
 
 ## When it runs
 
-- **Automatically** when a pull request is opened from a branch of the same
-  repository. Drafts, Dependabot and fork PRs are skipped.
-- **On demand** for anything else, including fork PRs, which GitHub gives no
-  secrets. An admin of the calling repository runs:
+- **Automatically in `dragonleech-code`** when a pull request is opened,
+  reopened, or updated against a covered branch. Drafts, Dependabot and fork
+  PRs are skipped by the reviewer. Marking a draft ready does not trigger a
+  review until another push; use manual dispatch where available.
+- **Outside the organization**, the example caller above runs on PR open.
+- **On demand** where a repository has a manual caller, including fork PRs,
+  which GitHub gives no secrets automatically. An admin runs:
   `gh workflow run ai-review.yml -f pr_number=123 [-f model=<id>]`.
 - **Model choice follows the filtered diff size.** Diffs below 128 KiB use
   `openai/gpt-6-sol`; diffs from 128 KiB to below 256 KiB use
