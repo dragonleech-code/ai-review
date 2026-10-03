@@ -206,6 +206,31 @@ open-weights model served by some thirty providers at differing quantizations,
 so a run does not reach a fixed target, and this script pins no provider.
 Pinning one is a prerequisite for taking it seriously, not a refinement.
 
+### Prompt tuning for GPT-6 Luna
+
+The system prompt in `.github/scripts/ai-review.sh` uses a short review
+sequence and an evidence check for each finding. It requires a supported cause
+as well as a trigger and failure, distinguishes removed code from new code,
+and treats missing context as unknown. A callback example addresses the wrong
+mechanism observed above: a spread cannot be blamed for overwriting a handler
+without evidence that it contains that handler. Suggested code must replace
+one shown line using known identifiers; larger fixes stay in the explanation.
+
+To use Luna regardless of diff size, pass `model: openai/gpt-6-luna` and
+`effort: medium` to the reusable workflow. This keeps the effort used in the
+existing measurements. The prompt is shared across the size-based model
+tiers. [Official OpenAI guidance](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices)
+provides a starting point for the GPT-6 family and recommends evaluating with
+the chosen model and workload.
+
+The measurements above predate this prompt revision; its effect on Luna has
+not been measured. Compare old and new prompts on the same inputs at the same
+effort, with repeated runs. Include the planted defects, clean code and docs
+changes, excluded lockfile updates, and callback changes both with and without
+destructuring context. Score false positives, missed defects, causal
+explanations, usable fixes, valid comment locations, and cost separately. A
+correct finding with a wrong cause still fails the explanation check.
+
 ## Inputs
 
 | Input          | Required | Default            | Purpose                                                  |
