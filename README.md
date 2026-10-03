@@ -28,11 +28,12 @@ branch and to `main` release branches, including repositories created later.
 No per-repository workflow file is needed for automatic review. The workflow
 must complete successfully before a covered PR can merge; its findings still
 require human judgment. Existing repository-local callers remain available for
-admin-only manual reviews, including fork PRs.
+organization-member manual reviews, including fork PRs from other users.
 
 ## Adding it to a repository outside this organization
 
-One file, `.github/workflows/ai-review.yml`:
+For an organization-owned repository, add
+`.github/workflows/ai-review.yml`:
 
 ```yaml
 name: AI review
@@ -67,17 +68,21 @@ jobs:
 ```
 
 `secrets: inherit` passes the organization's API key through. Nothing else is
-needed: no key, no script, no model choice per repo.
+needed for automatic review: no script or model choice per repo. Manual reviews
+also need the membership-check token described below.
 
 ## When it runs
 
 - **Automatically in `dragonleech-code`** when a pull request is opened,
-  reopened, or updated against a covered branch. Drafts, Dependabot and fork
-  PRs are skipped by the reviewer. Marking a draft ready does not trigger a
-  review until another push; use manual dispatch where available.
+  reopened, or updated against a covered branch, **only when the PR author is
+  a member or owner of the organization that owns the repository**. Outside
+  collaborators do not qualify, even with repository access. Drafts,
+  Dependabot and fork PRs are skipped by the reviewer. Marking a draft ready
+  does not trigger a review until another push; use manual dispatch where available.
 - **Outside the organization**, the example caller above runs on PR open.
 - **On demand** where a repository has a manual caller, including fork PRs,
-  which GitHub gives no secrets automatically. An admin runs:
+  which GitHub gives no secrets automatically. An organization member with
+  permission to dispatch the workflow runs:
   `gh workflow run ai-review.yml -f pr_number=123 [-f model=<id>]`.
 - **Model choice follows the filtered diff size.** Diffs below 128 KiB use
   `openai/gpt-6-sol`; diffs from 128 KiB to below 256 KiB use
@@ -85,8 +90,12 @@ needed: no key, no script, no model choice per repo.
   overrides this selection. An optional `AI_REVIEW_MAX_DIFF_BYTES` variable or
   `max_diff_bytes` workflow input can still skip diffs above a chosen limit.
 
-Dispatch requires admin because write access alone is enough to trigger and
-re-run workflows, and every run spends API credit.
+Manual dispatch and reruns require the person starting the run
+(`github.triggering_actor`) to be an active member of the repository's owning
+organization. Members can manually review any author's PR, including outside
+contributors and fork PRs. Membership is checked before checkouts or API spend;
+missing credentials, API errors, pending invitations, and non-members are
+rejected. Personally owned repositories are not supported.
 
 ## Configuration
 
@@ -96,9 +105,18 @@ Actions). A repository-level value overrides the organization's.
 | Name                 | Kind     | Purpose                                                               |
 | -------------------- | -------- | --------------------------------------------------------------------- |
 | `AI_REVIEW_API_KEY`  | secret   | Key for the provider. `OPENROUTER_API_KEY` is accepted as a fallback. |
+| `AI_REVIEW_MEMBERS_TOKEN` | secret | Required for manual reviews and reruns: GitHub token with organization **Members: read** permission for the calling repository's owner. |
 | `AI_REVIEW_BASE_URL` | variable | API base URL. Default `https://openrouter.ai/api/v1`.                 |
 | `AI_REVIEW_EFFORT`   | variable | `minimal`, `low`, `medium`, `high`, or `none`. Default `medium`.      |
 | `AI_REVIEW_MAX_DIFF_BYTES` | variable | Optional limit on filtered diff bytes; unset means no limit. |
+
+Automatic reviews use GitHub's PR author association (`MEMBER` or `OWNER`).
+Manual reviews and reruns query the owning organization's membership API, so
+private membership works too. The normal `GITHUB_TOKEN` does not provide
+organization Members permission. Use a fine-grained PAT or GitHub App token
+with **Members: read**, available to the calling repositories through the
+`AI_REVIEW_MEMBERS_TOKEN` Actions secret. See
+[GitHub's membership API permissions](https://docs.github.com/en/rest/orgs/members#get-organization-membership-for-a-user).
 
 Any OpenAI-compatible chat completions API works — OpenRouter, Gemini's
 compatibility endpoint, OpenAI. The automatic model IDs use OpenRouter names;
