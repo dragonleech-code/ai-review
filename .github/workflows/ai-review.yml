@@ -37,6 +37,16 @@ on:
         description: Optional diff size limit in bytes (blank = AI_REVIEW_MAX_DIFF_BYTES, else no limit)
         required: false
         type: string
+    secrets:
+      AI_REVIEW_API_KEY:
+        description: API key for the review model provider
+        required: false
+      OPENROUTER_API_KEY:
+        description: Legacy fallback for AI_REVIEW_API_KEY
+        required: false
+      AI_REVIEW_MEMBERS_TOKEN:
+        description: Token with Members read access to the calling repository's organization, required for manual reviews
+        required: false
 
 permissions:
   contents: read
@@ -45,29 +55,46 @@ permissions:
 jobs:
   review:
     # Fork PRs reach a workflow without secrets, so they cannot be reviewed
-    # automatically; an admin dispatches one by number instead. In a reusable
-    # workflow github.repository is the CALLER's repository, which is what
+    # automatically; an organization member dispatches one by number instead.
+    # MEMBER and OWNER exclude outside collaborators with repository access.
+    # In a reusable workflow github.repository is the CALLER's repository, which is what
     # both this check and the script's API calls want.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.repository.owner.type == 'Organization' &&
+       contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association) &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
        !github.event.pull_request.draft &&
        github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # Only for dispatch: an automatic run has no triggering person to vet.
-      # Write access is enough to dispatch and re-run workflows, and every run
-      # spends API credit, so require admin on the calling repository.
-      - name: Require an admin
-        if: github.event_name == 'workflow_dispatch'
+      # Dispatch may target any author's PR, but the person starting it must
+      # belong to the repository's owning organization. Check reruns too so
+      # an outside collaborator cannot reuse an authorized member's run.
+      - name: Require an organization member
+        if: github.event_name == 'workflow_dispatch' || github.run_attempt > 1
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.AI_REVIEW_MEMBERS_TOKEN }}
+          REPO_TOKEN: ${{ github.token }}
           WHO: ${{ github.triggering_actor }}
         run: |
-          perm=$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${WHO}/permission" --jq .permission)
-          if [ "$perm" != "admin" ]; then
-            echo "::error::AI review is admin-only; ${WHO} has '${perm}' access"
+          owner_type=$(GH_TOKEN="$REPO_TOKEN" gh api "repos/${GITHUB_REPOSITORY}" --jq .owner.type)
+          if [ "$owner_type" != "Organization" ]; then
+            echo "::error::AI review requires an organization-owned repository"
+            exit 1
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Set AI_REVIEW_MEMBERS_TOKEN with organization Members read access to verify membership"
+            exit 1
+          fi
+          org="${GITHUB_REPOSITORY%%/*}"
+          if ! state=$(gh api "orgs/${org}/memberships/${WHO}" --jq .state); then
+            echo "::error::Cannot verify ${WHO}'s membership in ${org}; no review will run"
+            exit 1
+          fi
+          if [ "$state" != "active" ]; then
+            echo "::error::AI review requires active membership in ${org}; ${WHO} is not an active member"
             exit 1
           fi
 
