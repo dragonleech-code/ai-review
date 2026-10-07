@@ -54,26 +54,56 @@ permissions:
 
 jobs:
   review:
-    # Fork PRs reach a workflow without secrets, so they cannot be reviewed
-    # automatically; an organization member dispatches one by number instead.
-    # MEMBER and OWNER exclude outside collaborators with repository access.
-    # In a reusable workflow github.repository is the CALLER's repository, which is what
-    # both this check and the script's API calls want.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.repository.owner.type == 'Organization' &&
-       contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association) &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       !github.event.pull_request.draft &&
-       github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Event payload fields can differ from REST responses. Fetch eligibility
+      # explicitly and explain exclusions before checkouts or model requests.
+      - name: Check review eligibility
+        id: eligibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          owner_type=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .owner.type)
+          if [ "$owner_type" != "Organization" ]; then
+            echo "::error::AI review requires an organization-owned repository (got ${owner_type})"
+            exit 1
+          fi
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+            echo "Manual review: organization membership will be verified next"
+            exit 0
+          fi
+          pr=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")
+          association=$(jq -r '.author_association' <<< "$pr")
+          head_repo=$(jq -r '.head.repo.full_name // ""' <<< "$pr")
+          draft=$(jq -r '.draft' <<< "$pr")
+          echo "Review eligibility: owner=${owner_type}, association=${association}, head=${head_repo}, draft=${draft}, actor=${ACTOR}"
+          reason=""
+          if [ "$association" != "MEMBER" ] && [ "$association" != "OWNER" ]; then
+            reason="PR author is not an organization member or owner"
+          elif [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
+            reason="fork PRs require an organization-member manual review"
+          elif [ "$draft" != "false" ]; then
+            reason="draft PRs are not reviewed automatically"
+          elif [ "$ACTOR" = 'dependabot[bot]' ]; then
+            reason="Dependabot reviews are excluded"
+          fi
+          if [ -n "$reason" ]; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AI review skipped: ${reason}"
+          else
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+          fi
       # Dispatch may target any author's PR, but the person starting it must
       # belong to the repository's owning organization. Check reruns too so
       # an outside collaborator cannot reuse an authorized member's run.
       - name: Require an organization member
-        if: github.event_name == 'workflow_dispatch' || github.run_attempt > 1
+        if: steps.eligibility.outputs.eligible == 'true' && (github.event_name == 'workflow_dispatch' || github.run_attempt > 1)
         env:
           GH_TOKEN: ${{ secrets.AI_REVIEW_MEMBERS_TOKEN }}
           REPO_TOKEN: ${{ github.token }}
@@ -102,6 +132,7 @@ jobs:
       # callers use, so bumping the tag moves the workflow and its script
       # together — update it in the same commit that cuts a new major tag.
       - name: Check out the reviewer
+        if: steps.eligibility.outputs.eligible == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: dragonleech-code/ai-review
@@ -115,6 +146,7 @@ jobs:
       # a pull request cannot rewrite the instructions sent with its own diff.
       # A repo without the file checks out nothing and the script skips it.
       - name: Check out the caller's conventions
+        if: steps.eligibility.outputs.eligible == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ github.repository }}
@@ -125,6 +157,7 @@ jobs:
           persist-credentials: false
 
       - name: Review
+        if: steps.eligibility.outputs.eligible == 'true'
         run: ./reviewer/.github/scripts/ai-review.sh
         env:
           # OPENROUTER_API_KEY is the older name, kept as a fallback.
