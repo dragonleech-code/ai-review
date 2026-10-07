@@ -18,7 +18,7 @@ def eligibility_script():
 class EligibilityTests(unittest.TestCase):
     def check_case(self, expected, *, owner='Organization', association='MEMBER',
                    head='example/repo', draft=False, actor='member', event='pull_request',
-                   failure=''):
+                   failure='', members_token='', membership='active'):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             gh = root / 'gh'
@@ -29,7 +29,11 @@ if os.environ['FAILURE'] in ('repository', 'pull') and (
     ('/pulls/' in path) == (os.environ['FAILURE'] == 'pull')
 ):
     sys.exit(1)
-if '/pulls/' in path:
+if '/memberships/' in path:
+    if os.environ.get('GH_TOKEN') != os.environ['MEMBERS_TOKEN']: sys.exit(1)
+    if os.environ['FAILURE'] == 'membership': sys.exit(1)
+    print(os.environ['MEMBERSHIP_FIXTURE'])
+elif '/pulls/' in path:
     print(os.environ['PR_FIXTURE'])
 else:
     print(os.environ['OWNER_FIXTURE'])
@@ -41,9 +45,10 @@ else:
                    'GITHUB_REPOSITORY': 'example/repo', 'GITHUB_OUTPUT': str(output),
                    'PR_NUMBER': '29', 'EVENT_NAME': event, 'ACTOR': actor,
                    'FAILURE': failure, 'OWNER_FIXTURE': owner,
+                   'MEMBERS_TOKEN': members_token, 'MEMBERSHIP_FIXTURE': membership,
                    'PR_FIXTURE': json.dumps({'author_association': association,
                                             'head': {'repo': {'full_name': head}},
-                                            'draft': draft})}
+                                            'draft': draft, 'user': {'login': 'member'}})}
             run = subprocess.run(['bash', '-c', eligibility_script()], env=env,
                                  capture_output=True, text=True)
             if expected == 'error':
@@ -62,7 +67,18 @@ else:
         self.check_case('true', association='OWNER')
 
     def test_outside_collaborator(self):
-        self.check_case('false', association='COLLABORATOR')
+        self.check_case('false', association='COLLABORATOR',
+                        members_token='fixture', membership='pending')
+
+    def test_private_member(self):
+        self.check_case('true', association='CONTRIBUTOR', members_token='fixture')
+
+    def test_private_member_missing_token(self):
+        self.check_case('error', association='CONTRIBUTOR')
+
+    def test_membership_api_failure(self):
+        self.check_case('error', association='CONTRIBUTOR', members_token='fixture',
+                        failure='membership')
 
     def test_fork(self):
         self.check_case('false', head='outsider/repo')

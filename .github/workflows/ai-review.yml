@@ -45,7 +45,7 @@ on:
         description: Legacy fallback for AI_REVIEW_API_KEY
         required: false
       AI_REVIEW_MEMBERS_TOKEN:
-        description: Token with Members read access to the calling repository's organization, required for manual reviews
+        description: Token with Members read access to the calling repository's organization, required for private-member automatic reviews and manual reviews
         required: false
 
 permissions:
@@ -66,6 +66,7 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
           EVENT_NAME: ${{ github.event_name }}
           ACTOR: ${{ github.actor }}
+          MEMBERS_TOKEN: ${{ secrets.AI_REVIEW_MEMBERS_TOKEN }}
         run: |
           set -euo pipefail
           owner_type=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .owner.type)
@@ -84,14 +85,28 @@ jobs:
           draft=$(jq -r '.draft' <<< "$pr")
           echo "Review eligibility: owner=${owner_type}, association=${association}, head=${head_repo}, draft=${draft}, actor=${ACTOR}"
           reason=""
-          if [ "$association" != "MEMBER" ] && [ "$association" != "OWNER" ]; then
-            reason="PR author is not an organization member or owner"
-          elif [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
+          if [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
             reason="fork PRs require an organization-member manual review"
           elif [ "$draft" != "false" ]; then
             reason="draft PRs are not reviewed automatically"
           elif [ "$ACTOR" = 'dependabot[bot]' ]; then
             reason="Dependabot reviews are excluded"
+          elif [ "$association" != "MEMBER" ] && [ "$association" != "OWNER" ]; then
+            # GITHUB_TOKEN may see a private member as CONTRIBUTOR. Verify
+            # that author's membership with the dedicated read-only token.
+            if [ -z "$MEMBERS_TOKEN" ]; then
+              echo "::error::PR author association is ${association}; set AI_REVIEW_MEMBERS_TOKEN with organization Members read access to verify private membership"
+              exit 1
+            fi
+            author=$(jq -r '.user.login' <<< "$pr")
+            org="${GITHUB_REPOSITORY%%/*}"
+            if ! state=$(GH_TOKEN="$MEMBERS_TOKEN" gh api "orgs/${org}/memberships/${author}" --jq .state); then
+              echo "::error::Cannot verify ${author}'s organization membership; no review will run"
+              exit 1
+            fi
+            if [ "$state" != "active" ]; then
+              reason="PR author does not have active organization membership"
+            fi
           fi
           if [ -n "$reason" ]; then
             echo "eligible=false" >> "$GITHUB_OUTPUT"
