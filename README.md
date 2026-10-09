@@ -68,8 +68,8 @@ jobs:
 ```
 
 `secrets: inherit` passes the organization's API key through. Nothing else is
-needed for automatic review: no script or model choice per repo. Manual reviews
-also need the membership-check token described below.
+needed per repository for script or model choice. Private-member automatic
+reviews and manual reviews also need the membership-check token described below.
 
 ## When it runs
 
@@ -105,12 +105,18 @@ Actions). A repository-level value overrides the organization's.
 | Name                 | Kind     | Purpose                                                               |
 | -------------------- | -------- | --------------------------------------------------------------------- |
 | `AI_REVIEW_API_KEY`  | secret   | Key for the provider. `OPENROUTER_API_KEY` is accepted as a fallback. |
-| `AI_REVIEW_MEMBERS_TOKEN` | secret | Required for manual reviews and reruns: GitHub token with organization **Members: read** permission for the calling repository's owner. |
+| `AI_REVIEW_MEMBERS_TOKEN` | secret | Required for private-member automatic reviews, manual reviews and reruns: GitHub token with organization **Members: read** permission for the calling repository's owner. |
 | `AI_REVIEW_BASE_URL` | variable | API base URL. Default `https://openrouter.ai/api/v1`.                 |
 | `AI_REVIEW_EFFORT`   | variable | `minimal`, `low`, `medium`, `high`, or `none`. Default `medium`.      |
 | `AI_REVIEW_MAX_DIFF_BYTES` | variable | Optional limit on filtered diff bytes; unset means no limit. |
 
-Automatic reviews use GitHub's PR author association (`MEMBER` or `OWNER`).
+Automatic reviews fetch repository ownership and the PR author association
+(`MEMBER` or `OWNER`) through the GitHub API before any checkout or model
+request. Excluded PRs report the reason in the eligibility step; API failures
+fail the job rather than silently skipping it. If the Actions token sees a
+private member as `CONTRIBUTOR`, the dedicated membership token verifies the
+PR author through the organization membership API; a missing token or failed
+verification stops the review.
 Manual reviews and reruns query the owning organization's membership API, so
 private membership works too. The normal `GITHUB_TOKEN` does not provide
 organization Members permission. Use a fine-grained PAT or GitHub App token
@@ -287,6 +293,13 @@ with:
 
 Leave the process material where humans read it. The reviewer only needs what
 a diff can break.
+
+## Testing
+
+Run `python3 -B -m unittest discover -s tests -v` to exercise the workflow
+eligibility shell against fixture API responses. The tests require Bash and
+`jq`; they make no network requests. Validate workflow syntax with
+`actionlint -shellcheck= .github/workflows/ai-review.yml`.
 
 ## Versioning
 
