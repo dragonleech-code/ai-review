@@ -86,8 +86,9 @@ reviews and manual reviews also need the membership-check token described below.
   `gh workflow run ai-review.yml -f pr_number=123 [-f model=<id>]`.
 - **Model choice follows the filtered diff size.** Diffs below 128 KiB use
   `openai/gpt-6-sol`; diffs from 128 KiB to below 256 KiB use
-  `openai/gpt-5.6-terra`; larger diffs use `openai/gpt-6-luna`. A `model` input
-  overrides this selection. An optional `AI_REVIEW_MAX_DIFF_BYTES` variable or
+  `openai/gpt-5.6-terra`; larger diffs use `openai/gpt-6-luna`. An
+  `AI_REVIEW_MODEL` variable overrides this selection; a `model` input takes
+  precedence over both. An optional `AI_REVIEW_MAX_DIFF_BYTES` variable or
   `max_diff_bytes` workflow input can still skip diffs above a chosen limit.
 
 Manual dispatch and reruns require the person starting the run
@@ -106,6 +107,7 @@ Actions). A repository-level value overrides the organization's.
 | -------------------- | -------- | --------------------------------------------------------------------- |
 | `AI_REVIEW_API_KEY`  | secret   | Key for the provider. `OPENROUTER_API_KEY` is accepted as a fallback. |
 | `AI_REVIEW_MEMBERS_TOKEN` | secret | Required for private-member automatic reviews, manual reviews and reruns: GitHub token with organization **Members: read** permission for the calling repository's owner. |
+| `AI_REVIEW_MODEL`    | variable | Default model ID; the `model` input takes precedence. |
 | `AI_REVIEW_BASE_URL` | variable | API base URL. Default `https://openrouter.ai/api/v1`.                 |
 | `AI_REVIEW_EFFORT`   | variable | `minimal`, `low`, `medium`, `high`, or `none`. Default `medium`.      |
 | `AI_REVIEW_MAX_DIFF_BYTES` | variable | Optional limit on filtered diff bytes; unset means no limit. |
@@ -260,7 +262,7 @@ correct finding with a wrong cause still fails the explanation check.
 | Input          | Required | Default            | Purpose                                                  |
 | -------------- | -------- | ------------------ | -------------------------------------------------------- |
 | `pr_number`    | yes      | —                  | PR to review, in the calling repository                  |
-| `model`        | no       | Size-based choice  | Per-run model override                                   |
+| `model`        | no       | `AI_REVIEW_MODEL`, then size-based choice | Per-run model override                                   |
 | `effort`       | no       | `AI_REVIEW_EFFORT` | Per-run reasoning effort                                 |
 | `context_file` | no       | `CLAUDE.md`        | Repo conventions sent with the diff, skipped when absent |
 | `max_diff_bytes` | no     | No limit           | Optional skip limit after excluded paths are removed    |
