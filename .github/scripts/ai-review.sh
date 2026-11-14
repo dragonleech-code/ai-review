@@ -65,7 +65,18 @@ fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" >"$work/diff.full"
+# GitHub refuses to serve a diff past its own limits (300 files, or too many
+# lines), as it does for every large release. That is the same case as
+# MAX_DIFF_BYTES below: there is no whole diff to review, so skip rather than
+# fail the check. Any other failure is still an error.
+if ! gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" >"$work/diff.full" 2>"$work/diff.err"; then
+  if grep -q 'too_large' "$work/diff.err"; then
+    echo "::notice::GitHub won't serve this pull request's diff, which is too large; skipping AI review"
+    exit 0
+  fi
+  cat "$work/diff.err" >&2
+  exit 1
+fi
 
 # Drop whole file sections whose path matches $exclude (lockfiles, vendored code).
 # Passed via ENVIRON, not -v: -v processes escapes and would turn `\.` into `.`.
